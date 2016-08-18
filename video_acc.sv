@@ -298,8 +298,8 @@ module video_acc #(
 
    // Variables used to decode instructions
    logic [5: 0] opcode;
-   logic [9: 0] src;
-   logic [9: 0] dest;
+   logic [12:0] src;
+   logic [12:0] dest;
    logic [12:0] len;
    logic [4: 0] attrib;
 
@@ -369,7 +369,7 @@ module video_acc #(
                         routing_dest  <= 'd0;
                      end
                      OP_LOAD_RD_FULL, OP_LOAD_RD_LOW: begin
-                        $display("Executing LOAD_RD_LOW with %x", fifo_r_data[31:6]);
+                        $display("Load %x to read base low", {fifo_r_data[31:6], 6'd0});
                         base_addr_rd[31:6] <= fifo_r_data[31:6];
                         if (opcode == OP_LOAD_RD_FULL)
                            current_state <= STATE_LOAD_FULL_RD;
@@ -378,7 +378,7 @@ module video_acc #(
                         routing_dest  <= 'd0;
                      end
                      OP_LOAD_WR_FULL, OP_LOAD_WR_LOW: begin
-                        $display("Executing LOAD_WR_LOW with %x", fifo_r_data[31:6]);
+                        $display("Load %x to write base low", {fifo_r_data[31:6], 6'd0});
                         base_addr_wr[31:6] <= fifo_r_data[31:6];
                         if (opcode == OP_LOAD_WR_FULL)
                            current_state <= STATE_LOAD_FULL_WR;
@@ -394,6 +394,9 @@ module video_acc #(
                         current_state <= STATE_IDLE;
                   endcase
                   if (opcode >= META_PARAM_END) begin
+                     $display("  src : base %x + offset %x = %x", base_addr_rd, src, base_addr_rd + src);
+                     $display("  dest: base %x + offset %x = %x", base_addr_wr, dest, base_addr_wr + dest);
+                     $display("  len : %d", len);
                      r_src              <= base_addr_rd + src;
                      r_dest             <= base_addr_wr + dest;
                      r_len              <= len;
@@ -405,14 +408,14 @@ module video_acc #(
             end
             STATE_LOAD_FULL_RD: begin
                if (!inst_empty) begin
-                  $display("Load %x to read high dword", fifo_r_data);
+                  $display("Load %x to read base high", fifo_r_data);
                   current_state       <= STATE_IDLE;
                   base_addr_rd[63:32] <= fifo_r_data;
                end
             end
             STATE_LOAD_FULL_WR: begin
                if (!inst_empty) begin
-                  $display("Load %x to write high dword", fifo_r_data);
+                  $display("Load %x to write base high", fifo_r_data);
                   current_state       <= STATE_IDLE;
                   base_addr_wr[63:32] <= fifo_r_data;
                end
