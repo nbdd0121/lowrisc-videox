@@ -348,7 +348,10 @@ module video_acc #(
          fifo_w_en <= 0;
 
          if (inst_en) begin
-            inst_read <= inst_empty ? 0 : fifo_r_data;
+            // Read how many instructions are left.
+            // Currently we don't count # of instructions remaining
+            // so we use 32 for full, 0 for empty and 1 otherwise
+            inst_read <= inst_full ? 32 : (inst_empty ? 0 : 1);
 
             if (&inst_we) begin
                if (!inst_full) begin
