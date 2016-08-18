@@ -57,7 +57,6 @@ module video_acc #(
    nasti_channel # (
       .ADDR_WIDTH(64),
       .DATA_WIDTH(DATA_WIDTH)
-      .DATA_WIDTH(DATA_WIDTH)
    ) mover_in_ch(), mover_out_ch();
 
    // Nasti-stream router
