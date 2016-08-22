@@ -13,7 +13,7 @@ module video_acc #(
 );
 
    // Number of different stream processing units
-   localparam NR_FUN_UNITS = 0;
+   localparam NR_FUN_UNITS = 4;
    localparam DEST_WIDTH = 3;
 
    // Registers used to control the movement of data
@@ -47,6 +47,16 @@ module video_acc #(
       .DATA_WIDTH(DATA_WIDTH),
       .DEST_WIDTH(DEST_WIDTH)
    ) to_dct_ch(), from_dct_ch();
+
+   nasti_stream_channel # (
+      .DATA_WIDTH(DATA_WIDTH),
+      .DEST_WIDTH(DEST_WIDTH)
+   ) to_yuv422to444_ch(), from_yuv422to444_ch();
+
+   nasti_stream_channel # (
+      .DATA_WIDTH(DATA_WIDTH),
+      .DEST_WIDTH(DEST_WIDTH)
+   ) to_yuv444toRGB_ch(), from_yuv444toRGB_ch();
 
    nasti_stream_channel # (
       .N_PORT(NR_FUN_UNITS + 1),
@@ -144,8 +154,8 @@ module video_acc #(
       .master_0(routed_ch),
       .master_1(from_dct_ch),
       .master_2(from_idct_ch),
-      .master_3(dummy_ch),
-      .master_4(dummy_ch),
+      .master_3(from_yuv422to444_ch),
+      .master_4(from_yuv444toRGB_ch),
       .master_5(dummy_ch),
       .master_6(dummy_ch),
       .master_7(dummy_ch)
@@ -158,8 +168,8 @@ module video_acc #(
       .slave_0(output_buf_ch),
       .slave_1(to_dct_ch),
       .slave_2(to_idct_ch),
-      .slave_3(dummy_ch),
-      .slave_4(dummy_ch),
+      .slave_3(to_yuv422to444_ch),
+      .slave_4(to_yuv444toRGB_ch),
       .slave_5(dummy_ch),
       .slave_6(dummy_ch),
       .slave_7(dummy_ch)
@@ -277,7 +287,8 @@ module video_acc #(
    localparam  OP_MOV          = 6'h8;
    localparam  OP_DCT          = 6'h9;
    localparam  OP_IDCT         = 6'hA;
-   localparam  OP_CHROMA       = 6'hB;
+   localparam  OP_YUV422TO444  = 6'hB;
+   localparam  OP_YUV444TORGB  = 6'hC;
    // Local param to denote the end of the meta instruction section
    localparam  META_PARAM_END  = 6'h8;
 
@@ -393,6 +404,14 @@ module video_acc #(
                         $display("Executing MOV");
                         routing_dest  <= 'd0;
                      end
+							OP_YUV422TO444: begin
+								$display("Execute YUV422TO444");
+								routing_dest  <= 'd3;
+							end
+                     OP_YUV444TORGB: begin
+                        $display("Execute OP_YUV444TORGB",);
+                        routing_dest <= 'd4;
+                     end
                      default:
                         current_state <= STATE_IDLE;
                   endcase
@@ -442,4 +461,19 @@ module video_acc #(
          endcase
       end
    end
+
+   yuv422to444_noninterp yuv422to444(
+      .aclk(aclk),
+      .aresetn(aresetn),
+      .src(to_yuv422to444_ch),
+      .dst(from_yuv422to444_ch)
+   );
+
+   yuv444toRGB yuv444toRGB(
+      .aclk(aclk),
+      .aresetn(aresetn),
+      .src(to_yuv444toRGB_ch),
+      .dst(from_yuv444toRGB_ch)
+   );
+
 endmodule
