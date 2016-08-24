@@ -137,9 +137,9 @@ module video_acc #(
       .DATA_WIDTH(DATA_WIDTH)
    ) dummy_ch();
 
-   nasti_stream_combiner #(
+   nasti_stream_combiner # (
       .N_PORT(NR_FUN_UNITS + 1)
-   ) glue(
+   ) glue (
       .slave(out_vein_ch),
       .master_0(routed_ch),
       .master_1(from_dct_ch),
@@ -151,9 +151,9 @@ module video_acc #(
       .master_7(dummy_ch)
    );
 
-   nasti_stream_slicer #(
-         .N_PORT(NR_FUN_UNITS + 1)
-   )  unglue(
+   nasti_stream_slicer # (
+      .N_PORT(NR_FUN_UNITS + 1)
+   ) unglue (
       .master(in_vein_ch),
       .slave_0(output_buf_ch),
       .slave_1(to_dct_ch),
@@ -165,60 +165,11 @@ module video_acc #(
       .slave_7(dummy_ch)
    );
 
-   // Splint incomming channel into two to avoid contension.
-   assign mover_in_ch.r_data  = dma.r_data ;
-   assign mover_in_ch.r_last  = dma.r_last ;
-   assign mover_in_ch.r_id    = dma.r_id   ;
-   assign mover_in_ch.r_resp  = dma.r_resp ;
-   assign mover_in_ch.r_user  = dma.r_user ;
-   assign mover_in_ch.r_valid = dma.r_valid;
-
-   assign dma.r_ready = mover_in_ch.r_ready;
-
-   assign dma.ar_id     = mover_in_ch.ar_id    ;
-   assign dma.ar_addr   = mover_in_ch.ar_addr  ;
-   assign dma.ar_len    = mover_in_ch.ar_len   ;
-   assign dma.ar_size   = mover_in_ch.ar_size  ;
-   assign dma.ar_burst  = mover_in_ch.ar_burst ;
-   assign dma.ar_lock   = mover_in_ch.ar_lock  ;
-   assign dma.ar_cache  = mover_in_ch.ar_cache ;
-   assign dma.ar_prot   = mover_in_ch.ar_prot  ;
-   assign dma.ar_qos    = mover_in_ch.ar_qos   ;
-   assign dma.ar_region = mover_in_ch.ar_region;
-   assign dma.ar_user   = mover_in_ch.ar_user  ;
-   assign dma.ar_valid  = mover_in_ch.ar_valid ;
-
-   assign mover_in_ch.ar_ready = dma.ar_ready;
-
-   assign dma.aw_id     = mover_out_ch.aw_id    ;
-   assign dma.aw_addr   = mover_out_ch.aw_addr  ;
-   assign dma.aw_len    = mover_out_ch.aw_len   ;
-   assign dma.aw_size   = mover_out_ch.aw_size  ;
-   assign dma.aw_burst  = mover_out_ch.aw_burst ;
-   assign dma.aw_lock   = mover_out_ch.aw_lock  ;
-   assign dma.aw_cache  = mover_out_ch.aw_cache ;
-   assign dma.aw_prot   = mover_out_ch.aw_prot  ;
-   assign dma.aw_qos    = mover_out_ch.aw_qos   ;
-   assign dma.aw_region = mover_out_ch.aw_region;
-   assign dma.aw_user   = mover_out_ch.aw_user  ;
-   assign dma.aw_valid  = mover_out_ch.aw_valid ;
-
-   assign mover_out_ch.aw_ready = dma.aw_ready;
-
-   assign dma.w_data  = mover_out_ch.w_data ;
-   assign dma.w_strb  = mover_out_ch.w_strb ;
-   assign dma.w_last  = mover_out_ch.w_last ;
-   assign dma.w_user  = mover_out_ch.w_user ;
-   assign dma.w_valid = mover_out_ch.w_valid;
-
-   assign mover_out_ch.w_ready = dma.w_ready;
-
-   assign mover_out_ch.b_id    = dma.b_id   ;
-   assign mover_out_ch.b_resp  = dma.b_resp ;
-   assign mover_out_ch.b_user  = dma.b_user ;
-   assign mover_out_ch.b_valid = dma.b_valid;
-
-   assign dma.b_ready = mover_out_ch.b_ready;
+   nasti_rw_combiner rw_combiner (
+      .read  (mover_in_ch),
+      .write (mover_out_ch),
+      .slave (dma)
+   );
 
    // Instruction FIFO R/W
    logic        inst_clk;
