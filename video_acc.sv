@@ -13,7 +13,7 @@ module video_acc #(
 );
 
    // Number of different stream processing units
-   localparam NR_FUN_UNITS = 4;
+   localparam NR_FUN_UNITS = 2;
    localparam DEST_WIDTH = 3;
 
    // Registers used to control the movement of data
@@ -144,6 +144,7 @@ module video_acc #(
 
    // Dummy channel connected to unused ports in splicer and combiner
    nasti_stream_channel # (
+      .DEST_WIDTH(DEST_WIDTH),
       .DATA_WIDTH(DATA_WIDTH)
    ) dummy_ch();
 
@@ -152,10 +153,10 @@ module video_acc #(
    ) glue(
       .slave(out_vein_ch),
       .master_0(routed_ch),
-      .master_1(from_dct_ch),
-      .master_2(from_idct_ch),
-      .master_3(from_yuv422to444_ch),
-      .master_4(from_yuv444toRGB_ch),
+      .master_1(from_yuv422to444_ch),
+      .master_2(from_yuv444toRGB_ch),
+      .master_3(dummy_ch),
+      .master_4(dummy_ch),
       .master_5(dummy_ch),
       .master_6(dummy_ch),
       .master_7(dummy_ch)
@@ -166,10 +167,10 @@ module video_acc #(
    )  unglue(
       .master(in_vein_ch),
       .slave_0(output_buf_ch),
-      .slave_1(to_dct_ch),
-      .slave_2(to_idct_ch),
-      .slave_3(to_yuv422to444_ch),
-      .slave_4(to_yuv444toRGB_ch),
+      .slave_1(to_yuv422to444_ch),
+      .slave_2(to_yuv444toRGB_ch),
+      .slave_3(dummy_ch),
+      .slave_4(dummy_ch),
       .slave_5(dummy_ch),
       .slave_6(dummy_ch),
       .slave_7(dummy_ch)
@@ -404,13 +405,13 @@ module video_acc #(
                         $display("Executing MOV");
                         routing_dest  <= 'd0;
                      end
-							OP_YUV422TO444: begin
-								$display("Execute YUV422TO444");
-								routing_dest  <= 'd3;
-							end
+                     OP_YUV422TO444: begin
+                        $display("Execute YUV422TO444");
+                        routing_dest  <= 'd1;
+                     end
                      OP_YUV444TORGB: begin
                         $display("Execute OP_YUV444TORGB",);
-                        routing_dest <= 'd4;
+                        routing_dest <= 'd2;
                      end
                      default:
                         current_state <= STATE_IDLE;
@@ -462,14 +463,18 @@ module video_acc #(
       end
    end
 
-   yuv422to444_noninterp yuv422to444(
+   yuv422to444_noninterp # (
+      .DEST_WIDTH(DEST_WIDTH)
+   ) yuv422to444 (
       .aclk(aclk),
       .aresetn(aresetn),
       .src(to_yuv422to444_ch),
       .dst(from_yuv422to444_ch)
    );
 
-   yuv444toRGB yuv444toRGB(
+   yuv444toRGB # (
+      .DEST_WIDTH(DEST_WIDTH)
+   ) yuv444toRGB (
       .aclk(aclk),
       .aresetn(aresetn),
       .src(to_yuv444toRGB_ch),
