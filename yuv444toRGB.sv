@@ -47,8 +47,8 @@ module yuv444toRGB # (
    logic signed [31:0] c_0, d_0, e_0, c_1, d_1, e_1;
    logic last_latch_read;
 
-   logic signed [31:0] x_0, y_0, z_0_0, z_0_1, z_0_2,
-                  x_1, y_1, z_1_0, z_1_1, z_1_2;
+   logic signed [31:0] x_0, y_0_0, y_0_1, z_0_0, z_0_1,
+                  x_1, y_1_0, y_1_1, z_1_0, z_1_1;
    logic last_latch_mult;
 
    logic signed [31:0] r_0, g_0, b_0, r_1, g_1, b_1;
@@ -105,16 +105,16 @@ module yuv444toRGB # (
 
          if (can_mult) begin
             x_0   <= 298 * c_0;
-            y_0   <= 100 * d_0;
+            y_0_0 <= 100 * d_0;
+            y_0_1 <= 516 * d_0;
             z_0_0 <= 409 * e_0;
             z_0_1 <= 208 * e_0;
-            z_0_2 <= 516 * e_0;
 
             x_1   <= 298 * c_1;
-            y_1   <= 100 * d_1;
+            y_1_0 <= 100 * d_1;
+            y_1_1 <= 516 * d_1;
             z_1_0 <= 409 * e_1;
             z_1_1 <= 208 * e_1;
-            z_1_2 <= 516 * e_1;
 
             last_latch_mult <= last_latch_read;
 
@@ -125,12 +125,12 @@ module yuv444toRGB # (
 
          if (can_add) begin
             r_0 <= (x_0         + z_0_0 + 128) >>> 8;
-            g_0 <= (x_0 - y_0   - z_0_1 + 128) >>> 8;
-            b_0 <= (x_0         + z_0_2 + 128) >>> 8;
+            g_0 <= (x_0 - y_0_0 - z_0_1 + 128) >>> 8;
+            b_0 <= (x_0         + y_0_1 + 128) >>> 8;
 
             r_1 <= (x_1         + z_1_0 + 128) >>> 8;
-            g_1 <= (x_1 - y_1   - z_1_1 + 128) >>> 8;
-            b_1 <= (x_1         + z_1_2 + 128) >>> 8;
+            g_1 <= (x_1 - y_1_0 - z_1_1 + 128) >>> 8;
+            b_1 <= (x_1         + y_1_1 + 128) >>> 8;
          
             last_latch_add <= last_latch_mult;
 
@@ -140,14 +140,14 @@ module yuv444toRGB # (
          end
 
          if (can_clamp) begin
-            dst.t_data[0][ 7: 0] <= clamp(r_0);
+            dst.t_data[0][ 7: 0] <= clamp(b_0);
             dst.t_data[0][15: 8] <= clamp(g_0);
-            dst.t_data[0][23:16] <= clamp(b_0);
+            dst.t_data[0][23:16] <= clamp(r_0);
             dst.t_data[0][31:24] <= 8'd255;
 
-            dst.t_data[0][39:32] <= clamp(r_1);
+            dst.t_data[0][39:32] <= clamp(b_1);
             dst.t_data[0][47:40] <= clamp(g_1);
-            dst.t_data[0][55:48] <= clamp(b_1);
+            dst.t_data[0][55:48] <= clamp(r_1);
             dst.t_data[0][63:56] <= 8'd255;
 
             dst.t_last <= last_latch_add;
