@@ -15,18 +15,16 @@ module video_acc #(
    // Number of different stream processing units
    localparam NR_FUN_UNITS = 2;
    localparam DEST_WIDTH = 3;
-
-   // Registers used to control the movement of data
-   logic r_valid_to_local, r_ready_to_local;
-   logic r_valid_from_local, r_ready_from_local;
-   logic [DEST_WIDTH-1:0] routing_dest;
+   localparam USER_WIDTH = 8;
+   localparam BUF_DEPTH = 7;
 
    // DMA and routed channels
    nasti_stream_channel # (
       .DATA_WIDTH(DATA_WIDTH),
-      .DEST_WIDTH(DEST_WIDTH)
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    )
-   to_dma_ch(), from_dma_ch(), routed_ch(),
+   to_dma_ch(), from_dma_ch(),
    to_buf_ch(), from_buf_ch();
 
    nasti_channel # (
@@ -37,38 +35,18 @@ module video_acc #(
    // Channels for stream processors
    nasti_stream_channel # (
       .DATA_WIDTH(DATA_WIDTH),
-      .DEST_WIDTH(DEST_WIDTH)
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    )
-   to_dct_ch(), from_dct_ch(),
-   to_idct_ch(), from_idct_ch(),
    to_yuv422to444_ch(), from_yuv422to444_ch(),
    to_yuv444toRGB_ch(), from_yuv444toRGB_ch();
 
    nasti_stream_channel # (
       .N_PORT(NR_FUN_UNITS + 1),
       .DEST_WIDTH(DEST_WIDTH),
-      .DATA_WIDTH(DATA_WIDTH)
+      .DATA_WIDTH(DATA_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    ) in_vein_ch(), out_vein_ch();
-
-   // Channels for DMA command issuing
-   nasti_stream_channel # (
-      .DATA_WIDTH (64)
-   ) src_command_ch(), src_command_buf_ch();
-
-   nasti_stream_channel # (
-      .DATA_WIDTH (64)
-   ) dest_command_ch(), dest_command_buf_ch();
-
-   // Nasti-stream router
-   nasti_stream_router #(
-      .DEST_WIDTH(DEST_WIDTH)
-   ) router (
-      .aclk(aclk),
-      .aresetn(aresetn),
-      .dest(routing_dest),
-      .master(from_buf_ch),
-      .slave(routed_ch)
-   );
 
    // Nasti-stream Crossbar
    // The "+ 1" accounts for the data movers
@@ -76,7 +54,8 @@ module video_acc #(
       .N_MASTER(NR_FUN_UNITS + 1),
       .N_SLAVE(NR_FUN_UNITS + 1),
       .DEST_WIDTH(DEST_WIDTH),
-      .DATA_WIDTH(DATA_WIDTH)
+      .DATA_WIDTH(DATA_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    ) crossbar (
       .aclk(aclk),
       .aresetn(aresetn),
@@ -94,7 +73,7 @@ module video_acc #(
       .N_PORT(NR_FUN_UNITS + 1)
    ) glue (
       .slave(out_vein_ch),
-      .master_0(routed_ch),
+      .master_0(from_buf_ch),
       .master_1(from_yuv422to444_ch),
       .master_2(from_yuv444toRGB_ch),
       .master_3(dummy_ch),
@@ -121,6 +100,7 @@ module video_acc #(
    nasti_stream_buf # (
       .DEST_WIDTH (DEST_WIDTH),
       .DATA_WIDTH (DATA_WIDTH),
+      .USER_WIDTH (USER_WIDTH),
       .BUF_SIZE   (16        )
    )
    input_buf (
@@ -144,79 +124,121 @@ module video_acc #(
 
    ////////////////////////
    // Source FIFO and DMA
+   typedef struct packed unsigned {
+      logic [7:0] user;
+      logic last;
+      logic [20:6] len;
+      logic reserved;
+      logic [38:6] addr;
+      logic [2:0] reserved2;
+      logic [2:0] dest;
+   } DataMoverCommand;
+
+   initial assert($bits(DataMoverCommand) == 64) else $error("DataMoverCommand is not 64-bit");
+
+   logic [63:0] src_w_data;
+   DataMoverCommand src_r_data;
+   logic src_r_en, src_w_en;
    logic src_full, src_empty;
+   logic [BUF_DEPTH:0] src_buf_len;
 
-   assign src_command_ch.t_keep = '1;
-   assign src_command_ch.t_strb = '1;
-   assign src_command_ch.t_last = '0;
-   assign src_command_ch.t_user = '0;
-   assign src_command_ch.t_dest = '0;
-   assign src_command_ch.t_id = '0;
-
-   assign src_full = !src_command_ch.t_ready;
-   assign src_empty = !src_command_buf_ch.t_valid;
-
-   nasti_stream_buf #(
-      .DATA_WIDTH (64),
-      .BUF_SIZE   (128)
+   fifo #(
+      .WIDTH (64),
+      .DEPTH (BUF_DEPTH)
    ) src_fifo (
       .aclk    (aclk),
       .aresetn (aresetn),
-      .src     (src_command_ch),
-      .dest    (src_command_buf_ch)
+      .w_en    (src_w_en),
+      .w_data  (src_w_data),
+      .r_en    (src_r_en),
+      .r_data  (src_r_data),
+      .full    (src_full),
+      .empty   (src_empty)
    );
 
    nasti_stream_mover # (
       .ADDR_WIDTH(ADDR_WIDTH),
-      .DATA_WIDTH(DATA_WIDTH)
+      .DATA_WIDTH(DATA_WIDTH),
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    ) dm_data_to_local (
-      .aclk(aclk),
-      .aresetn(aresetn),
-      .src(mover_in_ch),
-      .dest(from_dma_ch),
-      .command(src_command_buf_ch),
-      .r_valid(r_valid_to_local),
-      .r_ready(r_ready_to_local)
+      .aclk    (aclk),
+      .aresetn (aresetn),
+      .src     (mover_in_ch),
+      .dest    (from_dma_ch),
+      .r_addr  ({src_r_data.addr, 6'b0}),
+      .r_len   ({src_r_data.len , 6'b0}),
+      .r_dest  (src_r_data.dest > NR_FUN_UNITS ? 0 : src_r_data.dest),
+      .r_user  (src_r_data.user),
+      .r_last  (src_r_data.last),
+      .r_valid (!src_empty),
+      .r_ready (src_r_en)
    );
+
+   always_ff @(posedge aclk or negedge aresetn) begin
+      if (!aresetn) begin
+         src_buf_len <= 0;
+      end else begin
+         if ((src_r_en && !src_empty) ^ (src_w_en && !src_full)) begin
+            if (src_r_en && !src_empty)
+               src_buf_len <= src_buf_len - 1;
+            else
+               src_buf_len <= src_buf_len + 1;
+         end
+      end
+   end
 
    /////////////////////////////
    // Destination FIFO and DMA
+   logic [63:0] dest_w_data;
+   DataMoverCommand dest_r_data;
+   logic dest_r_en, dest_w_en;
    logic dest_full, dest_empty;
+   logic [BUF_DEPTH:0] dest_buf_len;
 
-   assign dest_command_ch.t_keep = '1;
-   assign dest_command_ch.t_strb = '1;
-   assign dest_command_ch.t_last = '0;
-   assign dest_command_ch.t_user = '0;
-   assign dest_command_ch.t_dest = '0;
-   assign dest_command_ch.t_id = '0;
-
-   assign dest_full = !dest_command_ch.t_ready;
-   assign dest_empty = !dest_command_buf_ch.t_valid;
-
-   nasti_stream_buf #(
-      .DATA_WIDTH (64),
-      .BUF_SIZE   (128)
+   fifo #(
+      .WIDTH (64),
+      .DEPTH (BUF_DEPTH)
    ) dest_fifo (
       .aclk    (aclk),
       .aresetn (aresetn),
-      .src     (dest_command_ch),
-      .dest    (dest_command_buf_ch)
+      .w_en    (dest_w_en),
+      .w_data  (dest_w_data),
+      .r_en    (dest_r_en),
+      .r_data  (dest_r_data),
+      .full    (dest_full),
+      .empty   (dest_empty)
    );
 
    stream_nasti_mover# (
       .ADDR_WIDTH(ADDR_WIDTH),
       .DATA_WIDTH(DATA_WIDTH)
    ) dm_data_from_local (
-      .aclk(aclk),
-      .aresetn(aresetn),
-      .src(to_dma_ch),
-      .dest(mover_out_ch),
-      .command(dest_command_buf_ch),
-      .r_valid(r_valid_from_local),
-      .r_ready(r_ready_from_local)
+      .aclk    (aclk),
+      .aresetn (aresetn),
+      .src     (to_dma_ch),
+      .dest    (mover_out_ch),
+      .w_addr  ({dest_r_data.addr, 6'b0}),
+      .w_len   ({dest_r_data.len , 6'b0}),
+      .w_valid (!dest_empty),
+      .w_ready (dest_r_en)
    );
 
-   // Instruction FIFO R/W
+   always_ff @(posedge aclk or negedge aresetn) begin
+      if (!aresetn) begin
+         dest_buf_len <= 0;
+      end else begin
+         if ((dest_r_en && !dest_empty) ^ (dest_w_en && !dest_full)) begin
+            if (dest_r_en && !dest_empty)
+               dest_buf_len <= dest_buf_len - 1;
+            else
+               dest_buf_len <= dest_buf_len + 1;
+         end
+      end
+   end
+
+   /////////////////////////
+   // Memory-mapped IO R/W
    logic        inst_clk;
    logic        inst_rst;
    logic        inst_en;
@@ -224,25 +246,6 @@ module video_acc #(
    logic [11:0] inst_addr;
    logic [31:0] inst_write;
    logic [31:0] inst_read;
-
-   // Instruction FIFO
-   logic fifo_w_en, fifo_r_en;
-   logic [31:0] fifo_w_data, fifo_r_data;
-   logic inst_full, inst_empty;
-
-   fifo #(
-      .WIDTH(32),
-      .DEPTH(7)
-   ) inst_fifo (
-      .aclk(aclk),
-      .aresetn(aresetn),
-      .w_en(fifo_w_en),
-      .w_data(fifo_w_data),
-      .r_en(fifo_r_en),
-      .r_data(fifo_r_data),
-      .full(inst_full),
-      .empty(inst_empty)
-   );
 
    // AXI-Lite BRAM controller used to populate the instruction FIFO
    nasti_lite_bram_ctrl # (
@@ -262,93 +265,47 @@ module video_acc #(
       .bram_rddata     (inst_read)
    );
 
-   // OPCODES
-   // Instructions
-   localparam  OP_NOP          = 6'h0;
-   localparam  OP_MOV          = 6'h8;
-   localparam  OP_DCT          = 6'h9;
-   localparam  OP_IDCT         = 6'hA;
-   localparam  OP_YUV422TO444  = 6'hB;
-   localparam  OP_YUV444TORGB  = 6'hC;
-
-   enum {
-      STATE_IDLE,
-      STATE_START,
-      STATE_WAIT
-   } state;
-
-   // Variables used to decode instructions
-   logic [5: 0] opcode;
-   logic [4: 0] attrib;
-
-   // Peak and split the value at the front of the FIFO
-   assign opcode =  fifo_r_data[ 5: 0];
-   assign attrib =  fifo_r_data[31:27];
-
-   // Comb logic as we want to update the read enable signal within the same cycle
-   always_comb begin
-      fifo_r_en = 0;
-      if (!inst_empty) begin
-         case (state)
-            STATE_WAIT:
-               if (r_ready_from_local && r_ready_to_local)
-                  fifo_r_en = 1;
-         endcase
-      end
-   end
-
    logic src_low_en, dest_low_en;
    logic [31:0] src_low, dest_low;
 
-   always_ff @(posedge aclk or negedge aresetn)
+   always_ff @(posedge inst_clk or posedge inst_rst)
    begin
-      if (!aresetn) begin
-         src_command_ch.t_valid <= 0;
-         dest_command_ch.t_valid <= 0;
-         fifo_w_en <= 0;
-         src_low_en <= 0;
+      if (inst_rst) begin
+         src_w_en    <= 0;
+         dest_w_en   <= 0;
+         src_low_en  <= 0;
          dest_low_en <= 0;
       end else begin
          // Default to low
-         src_command_ch.t_valid  <= 0;
-         dest_command_ch.t_valid  <= 0;
-         fifo_w_en <= 0;
+         src_w_en  <= 0;
+         dest_w_en <= 0;
 
          if (inst_en) begin
             case (inst_addr)
                12'd0:
-                  // Read how many instructions are left.
-                  // Currently we don't count # of instructions remaining
-                  // so we use 32 for full, 0 for empty and 1 otherwise
-                  inst_read <= inst_full ? 128 : (inst_empty ? 0 : 1);
+                  inst_read <= src_buf_len;
                12'd8:
-                  inst_read <= src_full ? 128 : (src_empty ? 0 : 1);
-               12'd16:
-                  inst_read <= dest_full ? 128 : (dest_empty ? 0 : 1);
+                  inst_read <= dest_buf_len;
                default:
                   inst_read <= 0;
             endcase
 
             if (&inst_we) begin
                case (inst_addr)
-                  12'd0: begin
-                     fifo_w_data <= inst_write;
-                     fifo_w_en   <= 1;
-                  end
-                  12'd8, 12'd12: begin
+                  12'd0, 12'd4: begin
                      if (src_low_en) begin
-                        src_command_ch.t_data <= {inst_write, src_low};
-                        src_command_ch.t_valid  <= 1;
+                        src_w_data <= {inst_write, src_low};
+                        src_w_en   <= 1;
                         src_low_en <= 0;
                      end else begin
                         src_low <= inst_write;
                         src_low_en <= 1;
                      end
                   end
-                  12'd16, 12'd20: begin
+                  12'd8, 12'd12: begin
                      if (dest_low_en) begin
-                        dest_command_ch.t_data <= {inst_write, dest_low};
-                        dest_command_ch.t_valid <= 1;
+                        dest_w_data <= {inst_write, dest_low};
+                        dest_w_en   <= 1;
                         dest_low_en <= 0;
                      end else begin
                         dest_low <= inst_write;
@@ -361,68 +318,10 @@ module video_acc #(
       end
    end
 
-   // Instruction fetch and instruction decode
-   always_ff @(posedge aclk or negedge aresetn)
-   begin
-      if (!aresetn) begin
-         state      <= STATE_IDLE;
-         r_valid_to_local   <= 'd0;
-         r_valid_from_local <= 'd0;
-         routing_dest       <= 'd0;
-      end
-      else begin
-         case (state)
-            STATE_IDLE: begin
-               if (!inst_empty) begin
-                  case (opcode)
-                     OP_NOP: begin
-                        state <= STATE_IDLE;
-                        routing_dest  <= 'd0;
-                     end
-                     OP_MOV: begin
-                        $display("Executing MOV");
-                        routing_dest  <= 'd0;
-                     end
-                     OP_YUV422TO444: begin
-                        $display("Execute YUV422TO444");
-                        routing_dest  <= 'd1;
-                     end
-                     OP_YUV444TORGB: begin
-                        $display("Execute OP_YUV444TORGB",);
-                        routing_dest <= 'd2;
-                     end
-                     default:
-                        state <= STATE_IDLE;
-                  endcase
-                  if (opcode != OP_NOP) begin
-                     r_valid_to_local   <= 1;
-                     r_valid_from_local <= 1;
-                     state      <= STATE_START;
-                  end
-               end
-            end
-            STATE_START: begin
-               $display("Waiting for both datamovers to start working.");
-               if (r_ready_to_local && r_valid_to_local)
-                  r_valid_to_local <= 0;
-               if (r_ready_from_local && r_valid_from_local)
-                  r_valid_from_local <= 0;
-               if (!r_valid_to_local && !r_valid_from_local)
-                  state <= STATE_WAIT;
-            end
-            STATE_WAIT: begin
-               if (r_ready_from_local && r_ready_to_local) begin
-                  $display("Execution of command finished.");
-                  state <= STATE_IDLE;
-               end
-            end
-            default: state <= STATE_IDLE;
-         endcase
-      end
-   end
-
    yuv422to444_noninterp # (
-      .DEST_WIDTH(DEST_WIDTH)
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH),
+      .CHAIN_ID  (2)
    ) yuv422to444 (
       .aclk(aclk),
       .aresetn(aresetn),
@@ -431,7 +330,8 @@ module video_acc #(
    );
 
    yuv444toRGB # (
-      .DEST_WIDTH(DEST_WIDTH)
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    ) yuv444toRGB (
       .aclk(aclk),
       .aresetn(aresetn),

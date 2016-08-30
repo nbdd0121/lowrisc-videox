@@ -16,7 +16,9 @@
 */
 module yuv422to444_noninterp # (
    DATA_WIDTH = 64,
-   DEST_WIDTH = 1
+   USER_WIDTH = 1,
+   DEST_WIDTH = 1,
+   CHAIN_ID   = 0
 ) (
    input aclk, 
    input aresetn,
@@ -26,26 +28,28 @@ module yuv422to444_noninterp # (
 );
 
    nasti_stream_channel # (
-     .DATA_WIDTH(DATA_WIDTH),
-     .DEST_WIDTH(DEST_WIDTH)
+      .DATA_WIDTH(DATA_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
    ) buf_ch ();
 
    // We have a timing cycle in which the t_ready signal is forwarded through the crossbar. Prevent this using a buffer.
    nasti_stream_buf # (
-     .DEST_WIDTH(DEST_WIDTH),
-     .BUF_SIZE(1)
+      .DATA_WIDTH(DATA_WIDTH),
+      .USER_WIDTH(USER_WIDTH),
+      .BUF_SIZE(1)
    ) input_buf (
-     .aclk(aclk),
-     .aresetn(aresetn),
+      .aclk(aclk),
+      .aresetn(aresetn),
 
-     .src(src),
-     .dest(buf_ch)
+      .src(src),
+      .dest(buf_ch)
    );
 
    logic [63:0] buffer;
    logic can_read, can_write, can_output;
    logic to_write, to_write_first;
    logic last_latch;
+   logic user_latch;
 
    always_comb begin
       can_write = dst.t_valid && dst.t_ready;
@@ -57,13 +61,15 @@ module yuv422to444_noninterp # (
 
    assign dst.t_strb = '1;
    assign dst.t_keep = '1;
-   assign dst.t_dest = 0;
+   assign dst.t_user = user_latch >> 1;
+   assign dst.t_dest = (user_latch & 1) ? CHAIN_ID : 0;
 
    always_ff @(posedge aclk or negedge aresetn) begin
       if (!aresetn) begin
          dst.t_valid <= 0;
 
          last_latch <= 0;
+         user_latch <= 0;
 
          to_write <= 0;
          to_write_first <= 0;
@@ -74,6 +80,7 @@ module yuv422to444_noninterp # (
 
             buffer <= buf_ch.t_data;
             last_latch <= buf_ch.t_last;
+            user_latch <= buf_ch.t_user;
 
             to_write <= 1;
             to_write_first <= 1;
