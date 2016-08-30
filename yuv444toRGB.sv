@@ -19,7 +19,9 @@
 */
 module yuv444toRGB # (
    DATA_WIDTH = 64,
-   DEST_WIDTH = 1
+   USER_WIDTH = 1,
+   DEST_WIDTH = 1,
+   CHAIN_ID   = 0
 ) (
    input aclk,
    input aresetn,
@@ -30,11 +32,12 @@ module yuv444toRGB # (
 
    nasti_stream_channel # (
       .DATA_WIDTH(DATA_WIDTH),
-      .DEST_WIDTH(DEST_WIDTH)
+      .USER_WIDTH(USER_WIDTH)
    ) buf_ch ();
 
    // We have a timing cycle in which the t_ready signal is forwarded through the crossbar. Prevent this using a buffer.
    nasti_stream_buf # (
+      .USER_WIDTH(USER_WIDTH),
       .BUF_SIZE(1)
    ) input_buf (
       .aclk(aclk),
@@ -46,13 +49,16 @@ module yuv444toRGB # (
 
    logic signed [31:0] c_0, d_0, e_0, c_1, d_1, e_1;
    logic last_latch_read;
+   logic [USER_WIDTH-1:0] user_latch_read;
 
    logic signed [31:0] x_0, y_0_0, y_0_1, z_0_0, z_0_1,
                   x_1, y_1_0, y_1_1, z_1_0, z_1_1;
    logic last_latch_mult;
+   logic [USER_WIDTH-1:0] user_latch_mult;
 
    logic signed [31:0] r_0, g_0, b_0, r_1, g_1, b_1;
    logic last_latch_add;
+   logic [USER_WIDTH-1:0] user_latch_add;
 
    logic can_read, can_mult, can_add, can_clamp, can_write;
    logic to_mult, to_add, to_clamp;
@@ -71,7 +77,6 @@ module yuv444toRGB # (
 
    assign dst.t_strb = '1;
    assign dst.t_keep = '1;
-   assign dst.t_dest = 0;
 
    assign buf_ch.t_ready = can_mult || !to_mult;
 
@@ -97,6 +102,7 @@ module yuv444toRGB # (
             e_1 <= buf_ch.t_data[0][39:32] - 128; // V
 
             last_latch_read <= buf_ch.t_last;
+            user_latch_read <= buf_ch.t_user;
 
             to_mult <= 1;
          end else if (can_mult) begin
@@ -117,6 +123,7 @@ module yuv444toRGB # (
             z_1_1 <= 208 * e_1;
 
             last_latch_mult <= last_latch_read;
+            user_latch_mult <= user_latch_read;
 
             to_add <= 1;
          end else if (can_add) begin
@@ -133,6 +140,7 @@ module yuv444toRGB # (
             b_1 <= (x_1         + y_1_1 + 128) >>> 8;
          
             last_latch_add <= last_latch_mult;
+            user_latch_add <= user_latch_mult;
 
             to_clamp <= 1;
          end else if (can_clamp) begin
@@ -151,6 +159,8 @@ module yuv444toRGB # (
             dst.t_data[0][63:56] <= 8'd255;
 
             dst.t_last <= last_latch_add;
+            dst.t_user <= user_latch_add >> 1;
+            dst.t_dest <= (user_latch_add & 1) ? CHAIN_ID : 0;
 
             dst.t_valid <= 1;
          end else if (can_write) begin

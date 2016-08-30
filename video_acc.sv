@@ -331,7 +331,8 @@ module video_acc #(
 
    yuv444toRGB # (
       .DEST_WIDTH(DEST_WIDTH),
-      .USER_WIDTH(USER_WIDTH)
+      .USER_WIDTH(USER_WIDTH),
+      .CHAIN_ID  (0)
    ) yuv444toRGB (
       .aclk(aclk),
       .aresetn(aresetn),
