@@ -13,7 +13,7 @@ module video_acc #(
 );
 
    // Number of different stream processing units
-   localparam NR_FUN_UNITS = 2;
+   localparam NR_FUN_UNITS = 3;
    localparam DEST_WIDTH = 3;
    localparam USER_WIDTH = 8;
    localparam BUF_DEPTH = 7;
@@ -39,7 +39,8 @@ module video_acc #(
       .USER_WIDTH(USER_WIDTH)
    )
    to_yuv422to444_ch(), from_yuv422to444_ch(),
-   to_yuv444toRGB_ch(), from_yuv444toRGB_ch();
+   to_yuv444toRGB_ch(), from_yuv444toRGB_ch(),
+   to_rgb32to16_ch  (), from_rgb32to16_ch  ();
 
    nasti_stream_channel # (
       .N_PORT(NR_FUN_UNITS + 1),
@@ -76,7 +77,7 @@ module video_acc #(
       .master_0(from_buf_ch),
       .master_1(from_yuv422to444_ch),
       .master_2(from_yuv444toRGB_ch),
-      .master_3(dummy_ch),
+      .master_3(from_rgb32to16_ch  ),
       .master_4(dummy_ch),
       .master_5(dummy_ch),
       .master_6(dummy_ch),
@@ -90,7 +91,7 @@ module video_acc #(
       .slave_0(to_buf_ch),
       .slave_1(to_yuv422to444_ch),
       .slave_2(to_yuv444toRGB_ch),
-      .slave_3(dummy_ch),
+      .slave_3(to_rgb32to16_ch  ),
       .slave_4(dummy_ch),
       .slave_5(dummy_ch),
       .slave_6(dummy_ch),
@@ -332,12 +333,22 @@ module video_acc #(
    yuv444toRGB # (
       .DEST_WIDTH(DEST_WIDTH),
       .USER_WIDTH(USER_WIDTH),
-      .CHAIN_ID  (0)
+      .CHAIN_ID  (3)
    ) yuv444toRGB (
       .aclk(aclk),
       .aresetn(aresetn),
       .src(to_yuv444toRGB_ch),
       .dst(from_yuv444toRGB_ch)
+   );
+
+   rgb32to16 # (
+      .DEST_WIDTH(DEST_WIDTH),
+      .USER_WIDTH(USER_WIDTH)
+   ) rgb32to16 (
+      .aclk    (aclk),
+      .aresetn (aresetn),
+      .src     (to_rgb32to16_ch),
+      .dst     (from_rgb32to16_ch)
    );
 
 endmodule

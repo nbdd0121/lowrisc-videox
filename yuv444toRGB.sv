@@ -77,6 +77,7 @@ module yuv444toRGB # (
 
    assign dst.t_strb = '1;
    assign dst.t_keep = '1;
+   assign dst.t_id   = '0;
 
    assign buf_ch.t_ready = can_mult || !to_mult;
 

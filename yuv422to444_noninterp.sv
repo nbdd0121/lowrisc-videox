@@ -61,6 +61,7 @@ module yuv422to444_noninterp # (
 
    assign dst.t_strb = '1;
    assign dst.t_keep = '1;
+   assign dst.t_id   = '0;
    assign dst.t_user = user_latch >> 1;
    assign dst.t_dest = (user_latch & 1) ? CHAIN_ID : 0;
 
