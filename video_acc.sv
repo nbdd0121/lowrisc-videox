@@ -13,7 +13,7 @@ module video_acc #(
 );
 
    // Number of different stream processing units
-   localparam NR_FUN_UNITS = 3;
+   localparam NR_FUN_UNITS = 5;
    localparam DEST_WIDTH = 3;
    localparam USER_WIDTH = 8;
    localparam BUF_DEPTH = 7;
@@ -40,7 +40,9 @@ module video_acc #(
    )
    to_yuv422to444_ch(), from_yuv422to444_ch(),
    to_yuv444toRGB_ch(), from_yuv444toRGB_ch(),
-   to_rgb32to16_ch  (), from_rgb32to16_ch  ();
+   to_rgb32to16_ch  (), from_rgb32to16_ch  (),
+   to_dct_ch        (), from_dct_ch        (),
+   to_idct_ch       (), from_idct_ch       ();
 
    nasti_stream_channel # (
       .N_PORT(NR_FUN_UNITS + 1),
@@ -78,10 +80,10 @@ module video_acc #(
       .master_1(from_yuv422to444_ch),
       .master_2(from_yuv444toRGB_ch),
       .master_3(from_rgb32to16_ch  ),
-      .master_4(dummy_ch),
-      .master_5(dummy_ch),
-      .master_6(dummy_ch),
-      .master_7(dummy_ch)
+      .master_4(from_idct_ch       ),
+      .master_5(from_dct_ch        ),
+      .master_6(dummy_ch           ),
+      .master_7(dummy_ch           )
    );
 
    nasti_stream_slicer # (
@@ -92,10 +94,10 @@ module video_acc #(
       .slave_1(to_yuv422to444_ch),
       .slave_2(to_yuv444toRGB_ch),
       .slave_3(to_rgb32to16_ch  ),
-      .slave_4(dummy_ch),
-      .slave_5(dummy_ch),
-      .slave_6(dummy_ch),
-      .slave_7(dummy_ch)
+      .slave_4(to_idct_ch       ),
+      .slave_5(to_dct_ch        ),
+      .slave_6(dummy_ch         ),
+      .slave_7(dummy_ch         )
    );
 
    nasti_stream_buf # (
@@ -351,4 +353,17 @@ module video_acc #(
       .dst     (from_rgb32to16_ch)
    );
 
+   stream_dct dct (
+      .in_ch(to_dct_ch),
+      .out_ch(from_dct_ch),
+      .aclk(aclk),
+      .aresetn(aresetn)
+   );
+
+   stream_idct idct (
+      .in_ch(to_idct_ch),
+      .out_ch(from_idct_ch),
+      .aclk(aclk),
+      .aresetn(aresetn)
+   );
 endmodule
