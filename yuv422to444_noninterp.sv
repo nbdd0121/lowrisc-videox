@@ -49,7 +49,7 @@ module yuv422to444_noninterp # (
    logic can_read, can_write, can_output;
    logic to_write;
    logic last_latch;
-   logic user_latch;
+   logic [USER_WIDTH-1:0] user_latch;
 
    always_comb begin
       can_write = dst.t_valid && dst.t_ready;
