@@ -28,24 +28,7 @@ module yuv444toRGB # (
 
    nasti_stream_channel.slave src,
    nasti_stream_channel.master dst
-   );
-
-   nasti_stream_channel # (
-      .DATA_WIDTH(DATA_WIDTH),
-      .USER_WIDTH(USER_WIDTH)
-   ) buf_ch ();
-
-   // We have a timing cycle in which the t_ready signal is forwarded through the crossbar. Prevent this using a buffer.
-   nasti_stream_buf # (
-      .USER_WIDTH(USER_WIDTH),
-      .BUF_SIZE(1)
-   ) input_buf (
-      .aclk(aclk),
-      .aresetn(aresetn),
-
-      .src(src),
-      .dest(buf_ch)
-   );
+);
 
    logic signed [31:0] c_0, d_0, e_0, c_1, d_1, e_1;
    logic last_latch_read;
@@ -72,14 +55,14 @@ module yuv444toRGB # (
       can_clamp = (can_write  || !dst.t_valid) && to_clamp;
       can_add   = (can_clamp  || !to_clamp   ) && to_add;
       can_mult  = (can_add    || !to_add     ) && to_mult;
-      can_read  = buf_ch.t_valid && buf_ch.t_ready;
+      can_read  = src.t_valid && src.t_ready;
    end
 
    assign dst.t_strb = '1;
    assign dst.t_keep = '1;
    assign dst.t_id   = '0;
 
-   assign buf_ch.t_ready = can_mult || !to_mult;
+   assign src.t_ready = can_mult || !to_mult;
 
    always_ff @(posedge aclk or negedge aresetn) begin
       if(!aresetn) begin
@@ -92,18 +75,18 @@ module yuv444toRGB # (
       end
       else begin
          if (can_read) begin
-            assert(&buf_ch.t_keep && &buf_ch.t_strb) else $error("Null byte not supported");
+            assert(&src.t_keep && &src.t_strb) else $error("Null byte not supported");
 
-            c_0 <= buf_ch.t_data[0][23:16] - 16;  // Y
-            d_0 <= buf_ch.t_data[0][15: 8] - 128; // U
-            e_0 <= buf_ch.t_data[0][ 7: 0] - 128; // V
+            c_0 <= src.t_data[0][23:16] - 16;  // Y
+            d_0 <= src.t_data[0][15: 8] - 128; // U
+            e_0 <= src.t_data[0][ 7: 0] - 128; // V
 
-            c_1 <= buf_ch.t_data[0][55:48] - 16;  // Y
-            d_1 <= buf_ch.t_data[0][47:40] - 128; // U
-            e_1 <= buf_ch.t_data[0][39:32] - 128; // V
+            c_1 <= src.t_data[0][55:48] - 16;  // Y
+            d_1 <= src.t_data[0][47:40] - 128; // U
+            e_1 <= src.t_data[0][39:32] - 128; // V
 
-            last_latch_read <= buf_ch.t_last;
-            user_latch_read <= buf_ch.t_user;
+            last_latch_read <= src.t_last;
+            user_latch_read <= src.t_user;
 
             to_mult <= 1;
          end else if (can_mult) begin

@@ -11,6 +11,7 @@ module stream_transpose # (
    assign in_ch.t_ready  = out_ch.t_ready;
    assign out_ch.t_valid = in_ch.t_valid;
    assign out_ch.t_keep  = in_ch.t_keep;
+   assign out_ch.t_last  = in_ch.t_last;
    assign out_ch.t_strb  = in_ch.t_strb;
    assign out_ch.t_id    = in_ch.t_id;
    assign out_ch.t_dest  = in_ch.t_dest;

@@ -8,7 +8,7 @@ module rgb32to16 # (
 
    nasti_stream_channel.slave src,
    nasti_stream_channel.master dst
-   );
+);
 
    nasti_stream_channel # (
       .DATA_WIDTH(DATA_WIDTH/2),

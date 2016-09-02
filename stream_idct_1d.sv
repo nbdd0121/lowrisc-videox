@@ -30,7 +30,9 @@ module stream_idct_1d #(
 
    assign out_ch.t_strb = '1;
    assign out_ch.t_keep = '1;
+   assign out_ch.t_id   = '0;
    assign out_ch.t_dest = '0;
+   assign out_ch.t_user = '0;
 
    assign in_ch.t_ready = can_s2 || !to_s2;
 
