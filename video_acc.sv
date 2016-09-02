@@ -364,7 +364,9 @@ module video_acc #(
       .dst     (from_saturate_ch)
    );
 
-   stream_idct idct (
+   stream_idct #(
+      .COEF_WIDTH(16)
+   ) idct (
       .in_ch(to_idct_ch),
       .out_ch(from_idct_ch),
       .aclk(aclk),

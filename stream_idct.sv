@@ -1,56 +1,118 @@
-module stream_idct (
+module stream_idct #(
+      parameter COEF_WIDTH = 32
+   )
+   (
       nasti_stream_channel.slave  in_ch,
       nasti_stream_channel.master out_ch,
 
-      input aclk,
-      input aresetn
+      input  aclk,
+      input  aresetn
    );
 
-   localparam COEF_WIDTH = 16;
+   nasti_stream_channel #(
+      .DATA_WIDTH(8*COEF_WIDTH)
+   )
+   to_idct1_ch(), from_idct1_ch(),
+   to_idct2_ch(), from_idct2_ch();
 
-   // In/Out staging registers.
-   logic signed [COEF_WIDTH - 1:0] row_idct_in    [0:7];
-   logic signed [COEF_WIDTH + 3:0] row_idct_out   [0:7];
-   logic signed [COEF_WIDTH - 1:0] row_idct_out_h [0:7];
-   logic idct_en, lock_idct, busy_idct, out_en;
+   nasti_stream_channel #(
+      .DATA_WIDTH(64*COEF_WIDTH)
+   )
+   to_transpose1_ch(), from_transpose1_ch(),
+   to_transpose2_ch(), from_transpose2_ch();
 
-   // This is used to perform signed truncation to avoid array size mismatches.
-   assign row_idct_out_h[0] = row_idct_out[0];
-   assign row_idct_out_h[1] = row_idct_out[1];
-   assign row_idct_out_h[2] = row_idct_out[2];
-   assign row_idct_out_h[3] = row_idct_out[3];
-   assign row_idct_out_h[4] = row_idct_out[4];
-   assign row_idct_out_h[5] = row_idct_out[5];
-   assign row_idct_out_h[6] = row_idct_out[6];
-   assign row_idct_out_h[7] = row_idct_out[7];
-
-   stream_dct_handler handler(
-      .in_ch(in_ch),
-      .out_ch(out_ch),
-
-      .row_dct_in(row_idct_in),
-      .row_dct_out(row_idct_out_h),
-      .dct_en(idct_en),
-      .lock_dct(lock_idct),
-      .busy_dct(busy_idct),
-      .out_en(out_en),
+   nasti_stream_widener #(
+      .MASTER_DATA_WIDTH(64),
+      .SLAVE_DATA_WIDTH(8*COEF_WIDTH)
+   ) widener (
+      .master(in_ch),
+      .slave(to_idct1_ch),
 
       .aclk(aclk),
       .aresetn(aresetn)
    );
 
-   // IDCT Pipeline
-   pipelined_idct #(
+   idct_as_stream #(
       .COEF_WIDTH(COEF_WIDTH)
-   ) idct_pl(
-      .row(row_idct_in),
-      .idct_row(row_idct_out),
-
-      .en(idct_en),
+   ) idct_st_1 (
       .aclk(aclk),
       .aresetn(aresetn),
-      .locked(lock_idct),
-      .busy(busy_idct),
-      .out_en(out_en)
+
+      .in_ch(to_idct1_ch),
+      .out_ch(from_idct1_ch)
+   );
+
+   nasti_stream_widener #(
+      .MASTER_DATA_WIDTH(8*COEF_WIDTH),
+      .SLAVE_DATA_WIDTH(64*COEF_WIDTH)
+   ) widener_t1 (
+      .master(from_idct1_ch),
+      .slave(to_transpose1_ch),
+
+      .aclk(aclk),
+      .aresetn(aresetn)
+   );
+
+   transpose_stream #(
+      .COEF_WIDTH(COEF_WIDTH)
+   ) transpose_stream_1 (
+      .aclk(aclk),
+      .aresetn(aresetn),
+
+      .in_ch(to_transpose1_ch),
+      .out_ch(from_transpose1_ch)
+   );
+
+   nasti_stream_narrower #(
+      .MASTER_DATA_WIDTH(64*COEF_WIDTH),
+      .SLAVE_DATA_WIDTH(8*COEF_WIDTH)
+   ) narrower_t1 (
+      .master(from_transpose1_ch),
+      .slave(to_idct2_ch),
+
+      .aclk(aclk),
+      .aresetn(aresetn)
+   );
+
+   idct_as_stream #(
+      .COEF_WIDTH(COEF_WIDTH)
+   ) idct_st_2 (
+      .aclk(aclk),
+      .aresetn(aresetn),
+
+      .in_ch(to_idct2_ch),
+      .out_ch(from_idct2_ch)
+   );
+
+   nasti_stream_widener #(
+      .MASTER_DATA_WIDTH(8*COEF_WIDTH),
+      .SLAVE_DATA_WIDTH(64*COEF_WIDTH)
+   ) widener_t2 (
+      .master(from_idct2_ch),
+      .slave(to_transpose2_ch),
+
+      .aclk(aclk),
+      .aresetn(aresetn)
+   );
+
+   transpose_stream #(
+      .COEF_WIDTH(COEF_WIDTH)
+   ) transpose_stream_2 (
+      .aclk(aclk),
+      .aresetn(aresetn),
+
+      .in_ch(to_transpose2_ch),
+      .out_ch(from_transpose2_ch)
+   );
+
+   nasti_stream_narrower #(
+      .MASTER_DATA_WIDTH(64*COEF_WIDTH),
+      .SLAVE_DATA_WIDTH(64)
+   ) narrower_t2 (
+      .master(from_transpose2_ch),
+      .slave(out_ch),
+
+      .aclk(aclk),
+      .aresetn(aresetn)
    );
 endmodule
