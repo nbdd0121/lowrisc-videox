@@ -5,22 +5,21 @@
 // Implementation is a slight modification on the one provied in:
 // Arun N. Netravali,Barry G. Haskell
 // "Digital Pictures Representation, Compression, and Standards" P.512
-module idct_as_stream #(
-      parameter COEF_WIDTH = 32
-   )
-   (
-      nasti_stream_channel.slave  in_ch,
-      nasti_stream_channel.master out_ch,
+module stream_idct_1d #(
+   parameter COEF_WIDTH = 16
+) (
+   input  aclk,
+   input  aresetn,
 
-      input  aclk,
-      input  aresetn
-   );
+   nasti_stream_channel.slave  in_ch,
+   nasti_stream_channel.master out_ch
+);
 
    function signed [COEF_WIDTH - 1: 0] round(signed [COEF_WIDTH + 1: 0] x);
       round = x < 0 ? (((x <<< 1) - 1) >>> 1) : (((x <<< 1) + 1) >>> 1);
    endfunction
 
-   logic signed [7:0][COEF_WIDTH - 1:0] row;
+   logic [7:0][COEF_WIDTH - 1:0] row, row_out;
    logic signed [COEF_WIDTH + 1:0] temp_a [0:7];
    logic signed [COEF_WIDTH + 1:0] temp_b [0:7];
    logic signed [COEF_WIDTH + 1:0] temp_c [0:7];
@@ -45,6 +44,7 @@ module idct_as_stream #(
    end
 
    assign row = in_ch.t_data;
+   assign out_ch.t_data = row_out;
 
    always_ff @(posedge aclk or negedge aresetn) begin
       if (!aresetn) begin
@@ -143,14 +143,14 @@ module idct_as_stream #(
             $display("IDCT OUT: %d, %d, %d, %d, %d, %d, %d, %d,",
                      round(temp_d[0]),round(temp_d[1]),round(temp_d[2]),round(temp_d[3]),
                      round(temp_d[4]),round(temp_d[5]),round(temp_d[6]),round(temp_d[7]));
-            out_ch.t_data[0][  COEF_WIDTH - 1:           0] <= round(temp_d[0]);
-            out_ch.t_data[0][2*COEF_WIDTH - 1:  COEF_WIDTH] <= round(temp_d[1]);
-            out_ch.t_data[0][3*COEF_WIDTH - 1:2*COEF_WIDTH] <= round(temp_d[2]);
-            out_ch.t_data[0][4*COEF_WIDTH - 1:3*COEF_WIDTH] <= round(temp_d[3]);
-            out_ch.t_data[0][5*COEF_WIDTH - 1:4*COEF_WIDTH] <= round(temp_d[4]);
-            out_ch.t_data[0][6*COEF_WIDTH - 1:5*COEF_WIDTH] <= round(temp_d[5]);
-            out_ch.t_data[0][7*COEF_WIDTH - 1:6*COEF_WIDTH] <= round(temp_d[6]);
-            out_ch.t_data[0][8*COEF_WIDTH - 1:7*COEF_WIDTH] <= round(temp_d[7]);
+            row_out[0] <= round(temp_d[0]);
+            row_out[1] <= round(temp_d[1]);
+            row_out[2] <= round(temp_d[2]);
+            row_out[3] <= round(temp_d[3]);
+            row_out[4] <= round(temp_d[4]);
+            row_out[5] <= round(temp_d[5]);
+            row_out[6] <= round(temp_d[6]);
+            row_out[7] <= round(temp_d[7]);
 
             out_ch.t_last  <= last_latch_s4;
             out_ch.t_valid <= 'd1;
