@@ -17,13 +17,13 @@ module saturate # (
    localparam signed COEF_MAX = 2 ** (EFFECTIVE_WIDTH - 1) - 1;
    localparam signed COEF_MIN = -(2 ** (EFFECTIVE_WIDTH - 1));
 
-   logic signed [MULTIPLE-1:0][COEF_WIDTH-1:0] src_data;
+   logic [MULTIPLE-1:0][COEF_WIDTH-1:0] src_data;
 
-   logic signed [MULTIPLE-1:0][COEF_WIDTH-1:0] clamped;
+   logic [MULTIPLE-1:0][COEF_WIDTH-1:0] clamped;
    logic last_latch_clamp;
    logic [USER_WIDTH-1:0] user_latch_clamp;
 
-   logic signed [MULTIPLE-1:0][COEF_WIDTH-1:0] dst_data;
+   logic [MULTIPLE-1:0][COEF_WIDTH-1:0] dst_data;
    logic [7:0] cnt;
    logic [MULTIPLE-1:0] comb_parity;
    logic parity;
